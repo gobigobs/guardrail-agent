@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+data/*.db
+data/*.db-journal
+.DS_Store
+ollama.log
+server.log
+.env
+*.log

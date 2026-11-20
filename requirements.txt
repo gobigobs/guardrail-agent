@@ -1,0 +1,13 @@
+# guardrail-agent
+# An AI agent that can use tools — but only inside guardrails.
+# Local only. No paid APIs. LLM: local Ollama (qwen2.5:3b-instruct).
+# ALL tools are clearly labelled MOCK / SAMPLE: nothing here sends a real
+# email, touches a real calendar, or writes to a real database.
+
+fastapi>=0.115
+uvicorn[standard]>=0.30
+httpx>=0.27
+langgraph>=0.6
+langchain-ollama>=0.3
+langchain-core>=0.3
+pillow

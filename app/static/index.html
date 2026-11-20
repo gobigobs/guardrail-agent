@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="guardrail-agent — a LangGraph AI agent that uses tools, but consequential actions pause for your approval and every step lands in an audit log. Local only.">
+<title>guardrail-agent — the agent acts. You decide.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  /* ——— Luxury bar: near-black canvas, one gold accent, one typeface ——— */
+  :root{
+    --bg:#0A0B0C; --bg2:#121317; --surface:#141518; --surface-2:#191B1E;
+    --line:#26282C; --line-soft:#1D1F23;
+    --text:#FAF7F2; --muted:#A8A29A; --faint:#6E6A63;
+    --gold:#C9A84C; --gold-soft:rgba(201,168,76,.14); --gold-line:rgba(201,168,76,.45);
+    --green:#4ADE80; --red:#F87171; --amber:#C9A84C;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --r:16px; --r-sm:10px;
+    --shadow:0 24px 60px -24px rgba(0,0,0,.7), 0 2px 8px rgba(0,0,0,.4);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; font-family:var(--sans); font-size:16px; line-height:1.6;
+    background:var(--bg); color:var(--text);
+    -webkit-font-smoothing:antialiased;
+  }
+  /* Ambient glow — one soft radial wash, not a particle field */
+  body::before{
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:
+      radial-gradient(720px 420px at 78% -8%, rgba(201,168,76,.10), transparent 65%),
+      radial-gradient(560px 380px at 8% 0%, rgba(201,168,76,.05), transparent 60%);
+  }
+  ::selection{background:var(--gold); color:#0A0B0C}
+  a{color:var(--gold)}
+  button{font-family:inherit}
+  :focus-visible{outline:2px solid var(--gold); outline-offset:2px}
+
+  .wrap{max-width:1200px; margin:0 auto; padding:0 32px; position:relative; z-index:1}
+  @media (max-width:640px){ .wrap{padding:0 20px} }
+
+  /* ——— Top bar ——— */
+  .topbar{display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:20px 0; border-bottom:1px solid var(--line-soft)}
+  .wordmark{font-weight:800; font-size:18px; letter-spacing:-.02em; text-decoration:none; color:var(--text)}
+  .wordmark em{font-style:normal; color:var(--gold)}
+  .topbar .tags{display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end}
+  .tag{font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--muted); border:1px solid var(--line); border-radius:999px; padding:5px 10px;
+    background:rgba(255,255,255,.02); white-space:nowrap}
+  .tag.gold{color:var(--gold); border-color:var(--gold-line); background:var(--gold-soft)}
+
+  /* ——— Hero — outcome first, demo below the fold line of the headline ——— */
+  .hero{padding:64px 0 40px; max-width:860px}
+  .eyebrow{font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--gold); margin:0 0 20px}
+  h1{margin:0 0 20px; font-size:clamp(44px,6.5vw,68px); line-height:1.02; letter-spacing:-.03em; font-weight:800}
+  h1 .thin{color:var(--muted); font-weight:800}
+  .lede{margin:0 0 28px; font-size:18px; line-height:1.6; color:var(--muted); max-width:640px}
+  .lede strong{color:var(--text); font-weight:600}
+  .hero-cta{display:flex; gap:12px; align-items:center; flex-wrap:wrap}
+  .btn{display:inline-flex; align-items:center; gap:8px; border:0; border-radius:999px; cursor:pointer;
+    font-size:15px; font-weight:600; padding:13px 24px; text-decoration:none;
+    transition:transform 150ms ease-out, box-shadow 200ms ease-out, background 200ms ease-out, opacity 200ms ease-out}
+  .btn:active{transform:scale(.97)}
+  .btn.gold{background:var(--gold); color:#0A0B0C; box-shadow:0 8px 28px -8px rgba(201,168,76,.55)}
+  .btn.gold:hover{transform:translateY(-1px); box-shadow:0 14px 34px -8px rgba(201,168,76,.65)}
+  .btn.ghost{background:transparent; color:var(--text); border:1px solid var(--line)}
+  .btn.ghost:hover{border-color:var(--gold-line); transform:translateY(-1px)}
+  .hero-note{font-family:var(--mono); font-size:12px; color:var(--faint); margin-top:16px; letter-spacing:.02em}
+
+  /* ——— Bento stats ——— */
+  .bento{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:8px 0 32px}
+  @media (max-width:900px){ .bento{grid-template-columns:repeat(2,1fr)} }
+  .stat{background:var(--surface); border:1px solid var(--line-soft); border-radius:var(--r);
+    padding:20px 22px; transition:border-color 200ms ease-out, transform 200ms ease-out}
+  .stat:hover{border-color:var(--gold-line); transform:translateY(-2px)}
+  .stat .num{font-size:32px; line-height:1; font-weight:800; letter-spacing:-.03em; font-variant-numeric:tabular-nums}
+  .stat .num small{font-size:18px; color:var(--gold)}
+  .stat .lbl{margin-top:8px; font-size:13px; color:var(--muted); line-height:1.45}
+  .stat .lbl b{color:var(--text); font-weight:600}
+
+  /* ——— Demo grid — the hero IS the working product ——— */
+  main{display:grid; grid-template-columns:1.5fr 1fr; gap:16px; padding-bottom:16px; align-items:start}
+  @media (max-width:900px){ main{grid-template-columns:1fr} }
+  .card{background:linear-gradient(180deg, var(--surface-2), var(--surface));
+    border:1px solid var(--line); border-radius:var(--r); padding:20px; margin-bottom:16px;
+    box-shadow:var(--shadow)}
+  .card h2{margin:0 0 4px; font-size:13px; font-weight:600; text-transform:uppercase;
+    letter-spacing:.1em; color:var(--muted); font-family:var(--mono)}
+  .card .sub{margin:0 0 14px; font-size:13px; color:var(--faint)}
+
+  #log{min-height:140px; max-height:380px; overflow:auto; padding-right:4px}
+  .msg{margin:0 0 10px; padding:12px 14px; border-radius:12px; line-height:1.55; font-size:15px;
+    animation:rise 300ms ease-out both}
+  .msg.user{background:#1E1A10; border:1px solid rgba(201,168,76,.25); margin-left:48px}
+  .msg.agent{background:#1B1D20; border:1px solid var(--line-soft); margin-right:24px}
+  .msg .who{display:block; font-family:var(--mono); font-size:11px; letter-spacing:.08em;
+    color:var(--muted); margin-bottom:4px; text-transform:uppercase}
+  .msg.user .who{color:var(--gold)}
+  @keyframes rise{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none}}
+
+  .step{font-size:13px; padding:9px 12px; border:1px solid var(--line); border-radius:var(--r-sm);
+    margin:6px 0; background:rgba(255,255,255,.02); animation:rise 300ms ease-out both}
+  .step .st{font-weight:600; font-family:var(--mono); font-size:12px; letter-spacing:.04em}
+  .st.done,.st.approved{color:var(--green)} .st.declined{color:var(--amber)}
+  .st.refused,.st.error{color:var(--red)}
+  .step .detail{color:var(--muted); display:block; margin-top:2px}
+  .step code{color:var(--gold); font-size:12px; font-family:var(--mono)}
+
+  form{display:flex; gap:8px; margin-top:14px}
+  input[type=text]{flex:1; min-width:0; padding:13px 14px; border-radius:12px; border:1px solid var(--line);
+    background:var(--bg2); color:var(--text); font-size:15px; font-family:inherit;
+    transition:border-color 200ms ease-out, box-shadow 200ms ease-out}
+  input[type=text]::placeholder{color:var(--faint)}
+  input[type=text]:focus{outline:none; border-color:var(--gold-line); box-shadow:0 0 0 3px rgba(201,168,76,.15)}
+  button.primary{background:var(--gold); color:#0A0B0C; padding:13px 20px; border:0; border-radius:12px;
+    font-weight:600; cursor:pointer; font-size:15px;
+    transition:transform 150ms ease-out, box-shadow 200ms ease-out, opacity 200ms ease-out}
+  button.primary:hover{transform:translateY(-1px); box-shadow:0 10px 24px -8px rgba(201,168,76,.6)}
+  button.primary:active{transform:scale(.97)}
+  button:disabled{opacity:.5; cursor:default; transform:none !important; box-shadow:none !important}
+  .examples{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px}
+  .examples button{background:transparent; color:var(--muted); font-weight:400; font-size:13px;
+    padding:8px 12px; border:1px solid var(--line); border-radius:999px; cursor:pointer;
+    transition:color 200ms ease-out, border-color 200ms ease-out, transform 150ms ease-out}
+  .examples button:hover{color:var(--text); border-color:var(--gold-line); transform:translateY(-1px)}
+
+  /* ——— Approval card: glass over the gold glow ——— */
+  #approval{display:none; border:1px solid var(--gold-line);
+    background:linear-gradient(180deg, rgba(201,168,76,.12), rgba(20,21,24,.92));
+    -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px);
+    box-shadow:0 24px 60px -20px rgba(201,168,76,.35), var(--shadow)}
+  #approval.show{display:block; animation:rise 300ms ease-out both}
+  #approval h2{color:var(--gold)}
+  #approval pre{background:rgba(10,11,12,.75); border:1px solid var(--line); padding:12px;
+    border-radius:var(--r-sm); overflow:auto; font-size:12.5px; font-family:var(--mono); color:var(--text); margin:12px 0 0}
+  .row{display:flex; gap:8px; margin-top:14px; flex-wrap:wrap}
+  button.approve{background:var(--green); color:#052e16; padding:12px 18px; border:0; border-radius:12px;
+    font-weight:600; cursor:pointer; font-size:14px; transition:transform 150ms ease-out, opacity 200ms ease-out}
+  button.approve:hover{transform:translateY(-1px)}
+  button.approve:active{transform:scale(.97)}
+  button.decline{background:transparent; color:var(--red); border:1px solid rgba(248,113,113,.4);
+    padding:12px 18px; border-radius:12px; font-weight:600; cursor:pointer; font-size:14px;
+    transition:transform 150ms ease-out, border-color 200ms ease-out}
+  button.decline:hover{border-color:var(--red); transform:translateY(-1px)}
+
+  /* ——— Right rail ——— */
+  table{width:100%; border-collapse:collapse; font-size:13px}
+  th,td{text-align:left; padding:6px 4px; border-bottom:1px solid var(--line-soft); vertical-align:top}
+  th{color:var(--muted); font-weight:600; font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase}
+  .pill{display:inline-block; font-family:var(--mono); font-size:11px; padding:2px 8px; border-radius:999px; font-weight:600}
+  .pill.llm_call{background:#1e3a5f;color:#bae6fd} .pill.tool_call{background:#14532d;color:#bbf7d0}
+  .pill.approval_requested,.pill.approval_decision{background:var(--gold-soft);color:var(--gold)}
+  .pill.refusal{background:#7f1d1d;color:#fecaca} .pill.run_started,.pill.run_finished{background:#26282C;color:#e2e8f0}
+  .pill.plan_created{background:#3b0764;color:#e9d5ff}
+  .muted{color:var(--muted); font-size:13px}
+  #auditLog{max-height:320px; overflow:auto; font-size:12.5px}
+  .evt{padding:8px 0; border-bottom:1px solid var(--line-soft); line-height:1.5}
+  .evt:last-child{border-bottom:0}
+  .evt .t{color:var(--faint); font-family:var(--mono); font-size:11px}
+  .evt code{font-family:var(--mono); color:var(--muted); word-break:break-word}
+  #outbox ul,#calendar ul{margin:6px 0 0; padding-left:18px; font-size:14px; line-height:1.6}
+  #outbox li,#calendar li{margin-bottom:2px}
+  #calendar b{font-size:13px; color:var(--gold); font-family:var(--mono); font-weight:600; letter-spacing:.04em}
+
+  /* ——— Guardrail bento ——— */
+  .bento2{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:8px 0 40px}
+  @media (max-width:900px){ .bento2{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:560px){ .bento2{grid-template-columns:1fr} }
+  .feat{background:var(--surface); border:1px solid var(--line-soft); border-radius:var(--r); padding:22px;
+    transition:border-color 200ms ease-out, transform 200ms ease-out}
+  .feat:hover{border-color:var(--gold-line); transform:translateY(-2px)}
+  .feat .icon{font-size:20px; margin-bottom:12px}
+  .feat h3{margin:0 0 6px; font-size:16px; font-weight:600; letter-spacing:-.01em}
+  .feat p{margin:0; font-size:14px; color:var(--muted); line-height:1.55}
+  .feat p code{font-family:var(--mono); font-size:12.5px; color:var(--gold)}
+
+  footer{border-top:1px solid var(--line-soft); padding:24px 0 40px; color:var(--faint); font-size:13px; line-height:1.6}
+  footer b{color:var(--muted); font-weight:600}
+
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation:none !important; transition:none !important; scroll-behavior:auto !important}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="topbar">
+    <a class="wordmark" href="/">guardrail<em>—</em>agent</a>
+    <div class="tags">
+      <span class="tag gold">All tools mock / sample</span>
+      <span class="tag">Nothing real is sent</span>
+      <span class="tag">Local · No API keys</span>
+    </div>
+  </header>
+
+  <section class="hero">
+    <p class="eyebrow">LangGraph · Human-in-the-loop · Local Ollama</p>
+    <h1>The agent acts.<br><span class="thin">You decide.</span></h1>
+    <p class="lede">A LangGraph agent that checks calendars, drafts and sends email, and queries a database — but <strong>sending email or creating an event pauses for your approval</strong>, database writes are <strong>refused by policy</strong>, and <strong>every step lands in an audit log</strong> you can watch live below.</p>
+    <div class="hero-cta">
+      <button class="btn gold" id="ctaTry" type="button">Try the approval gate ↓</button>
+      <a class="btn ghost" href="#auditCard">Watch the audit log</a>
+    </div>
+    <p class="hero-note">32/32 end-to-end checks passed · qwen2.5:3b-instruct on local Ollama · no cloud, no SMTP</p>
+  </section>
+
+  <section class="bento" aria-label="Proof points">
+    <div class="stat"><div class="num">32<small>/32</small></div><div class="lbl"><b>Verification checks passed</b> — safe, approve, decline, refuse, audit</div></div>
+    <div class="stat"><div class="num">5</div><div class="lbl"><b>Tools, all MOCK / SAMPLE</b> — calendar, email, read-only database</div></div>
+    <div class="stat"><div class="num">0</div><div class="lbl"><b>Real emails ever sent</b> — sending writes to a MOCK outbox only</div></div>
+    <div class="stat"><div class="num" id="statAudit">—</div><div class="lbl"><b>Audit events logged</b> — live count from this server</div></div>
+  </section>
+
+  <main>
+    <div>
+      <div class="card">
+        <h2>Live demo — chat</h2>
+        <p class="sub">This is the working product, not a screenshot. Ask it to do something consequential.</p>
+        <div id="log"></div>
+        <div id="steps"></div>
+        <form id="chatForm">
+          <input id="msg" type="text" placeholder="Ask something — e.g. what is on my calendar tomorrow?" autocomplete="off">
+          <button class="primary" type="submit">Send</button>
+        </form>
+        <div class="examples">
+          <button data-q="What is on my calendar tomorrow?">Calendar tomorrow</button>
+          <button data-q="Send an email to Priya about the project update">Send email to Priya</button>
+          <button data-q="How many customers are in the database?">Count customers</button>
+          <button data-q="Delete all customers from the database">Delete customers — blocked</button>
+          <button data-q="Schedule a team lunch tomorrow at 13:00">Schedule lunch</button>
+        </div>
+      </div>
+
+      <div class="card" id="approval">
+        <h2>Approval needed</h2>
+        <p class="muted">The agent wants to do this consequential action. Nothing has run yet — review the exact tool call, then decide.</p>
+        <pre id="approvalPayload"></pre>
+        <div class="row">
+          <button class="approve" id="btnApprove">Approve &amp; run</button>
+          <button class="decline" id="btnDecline">Decline</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card" id="auditCard">
+        <h2>Audit log — live</h2>
+        <p class="sub">Newest first. Every LLM call, tool call, approval and refusal.</p>
+        <div id="auditLog"><span class="muted">Loading…</span></div>
+      </div>
+      <div class="card">
+        <h2>MOCK outbox</h2>
+        <p class="sub">Approved emails land here. Nothing leaves this machine.</p>
+        <div id="outbox"><span class="muted">Loading…</span></div>
+      </div>
+      <div class="card">
+        <h2>MOCK calendar</h2>
+        <p class="sub">Seeded relative to today.</p>
+        <div id="calendar"><span class="muted">Loading…</span></div>
+      </div>
+    </div>
+  </main>
+
+  <section class="bento2" aria-label="How the guardrails work">
+    <div class="feat"><div class="icon">⏸️</div><h3>Approval gate</h3><p>Consequential actions pause via LangGraph <code>interrupt()</code> and resume only with <code>Command(resume=…)</code>. The tool runs <b>after</b> you say yes — never before.</p></div>
+    <div class="feat"><div class="icon">🛡️</div><h3>Guardrails in code</h3><p>Risk tiers in <code>config.py</code>, one choke point in <code>guardrails.classify()</code>. The model proposes; code decides. It cannot talk its way past.</p></div>
+    <div class="feat"><div class="icon">📋</div><h3>Audit everything</h3><p>Append-only SQLite log: every run, LLM call, plan, tool call, approval and refusal — with run id, timestamp and actor.</p></div>
+    <div class="feat"><div class="icon">🚫</div><h3>Refusals, logged</h3><p>Database writes are refused with a reason and the SAMPLE database stays untouched — read-only connection as defence in depth.</p></div>
+  </section>
+
+  <footer>
+    <b>Local demo only.</b> Email “sending” writes to the MOCK outbox above — no SMTP, no real recipients.
+    The SAMPLE database is read-only by policy; every write is refused and logged.
+    Model: local Ollama qwen2.5:3b-instruct. No paid API keys.
+  </footer>
+</div>
+
+<script>
+let currentRun = null;
+
+const $ = id => document.getElementById(id);
+function esc(s){ return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function addMsg(who, text){
+  const d = document.createElement('div');
+  d.className = 'msg ' + (who === 'You' ? 'user' : 'agent');
+  d.innerHTML = `<span class="who">${esc(who)}</span>${esc(text)}`;
+  $('log').appendChild(d);
+  d.scrollIntoView({block:'nearest'});
+}
+
+function renderSteps(steps){
+  $('steps').innerHTML = (steps || []).map(s => {
+    const cls = s.status === 'done' ? 'done' : s.status === 'approved+done' ? 'approved'
+      : s.status === 'declined' ? 'declined' : (s.status === 'refused' || s.status === 'error') ? 'refused' : '';
+    return `<div class="step"><span class="st ${cls}">${esc(s.status.toUpperCase())}</span> — <code>${esc(s.tool)}</code>` +
+      `<span class="detail">${esc(s.detail || '')}${s.reason ? ' · ' + esc(s.reason) : ''}</span></div>`;
+  }).join('');
+}
+
+function showApproval(run){
+  currentRun = run.run_id;
+  if (run.pending_approval){
+    $('approval').classList.add('show');
+    $('approvalPayload').textContent = JSON.stringify(run.pending_approval, null, 2);
+  } else {
+    $('approval').classList.remove('show');
+  }
+}
+
+async function sendChat(text){
+  addMsg('You', text);
+  $('msg').value = '';
+  const res = await fetch('/chat', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({message: text})});
+  const run = await res.json();
+  renderSteps(run.steps);
+  showApproval(run);
+  if (run.status === 'awaiting_approval'){
+    addMsg('Agent', 'Paused — this needs your approval. Review the card below, then Approve or Decline.');
+  } else if (run.final_answer){
+    addMsg('Agent', run.final_answer);
+  }
+  refreshPanels();
+}
+
+async function decide(decision){
+  if (!currentRun) return;
+  $('btnApprove').disabled = true; $('btnDecline').disabled = true;
+  const res = await fetch('/approve', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({run_id: currentRun, decision})});
+  const run = await res.json();
+  $('btnApprove').disabled = false; $('btnDecline').disabled = false;
+  renderSteps(run.steps);
+  showApproval(run);
+  if (run.status === 'awaiting_approval'){
+    addMsg('Agent', 'Another approval is needed — see the card.');
+  } else if (run.final_answer){
+    addMsg('Agent', run.final_answer);
+  }
+  refreshPanels();
+}
+
+async function refreshPanels(){
+  try {
+    const a = await (await fetch('/audit?limit=25')).json();
+    $('auditLog').innerHTML = a.events.map(e =>
+      `<div class="evt"><span class="pill ${esc(e.event_type)}">${esc(e.event_type)}</span> ` +
+      `<span class="t">${esc(e.ts.slice(11,19))} · ${esc(e.run_id)} · ${esc(e.actor)}</span><br><code>${esc(JSON.stringify(e.detail).slice(0, 220))}</code></div>`
+    ).join('') || '<span class="muted">No events yet.</span>';
+    const h = await (await fetch('/health')).json();
+    if (h.audit_events != null) $('statAudit').textContent = h.audit_events;
+  } catch(e){ /* keep old */ }
+  try {
+    const o = await (await fetch('/outbox')).json();
+    $('outbox').innerHTML =
+      (o.sent_mock.length ? '<b>Sent (MOCK):</b><ul>' + o.sent_mock.map(m => `<li>${esc(m.to)} — ${esc(m.subject)}</li>`).join('') + '</ul>' : '<span class="muted">Outbox empty.</span>') +
+      (o.drafts.length ? '<div style="margin-top:10px"><b>Drafts:</b><ul>' + o.drafts.map(m => `<li>${esc(m.to)} — ${esc(m.subject)}</li>`).join('') + '</ul></div>' : '');
+  } catch(e){ /* keep old */ }
+  try {
+    const c = await (await fetch('/calendar')).json();
+    $('calendar').innerHTML = Object.entries(c.mock_calendar).map(([day, evs]) =>
+      `<b>${esc(day)}</b><ul>${evs.map(ev => `<li>${esc(ev.time)} — ${esc(ev.title)}</li>`).join('')}</ul>`
+    ).join('');
+  } catch(e){ /* keep old */ }
+}
+
+$('chatForm').addEventListener('submit', e => { e.preventDefault(); const t = $('msg').value.trim(); if (t) sendChat(t); });
+document.querySelectorAll('.examples button').forEach(b =>
+  b.addEventListener('click', () => sendChat(b.dataset.q)));
+$('btnApprove').addEventListener('click', () => decide('approve'));
+$('btnDecline').addEventListener('click', () => decide('decline'));
+$('ctaTry').addEventListener('click', () => {
+  $('msg').value = 'Send an email to Priya about the project update';
+  $('msg').focus();
+  $('msg').scrollIntoView({block:'center', behavior:'smooth'});
+});
+
+addMsg('Agent', 'Hi! I can check your MOCK calendar, draft/send MOCK emails, and query the SAMPLE database. Sending email, creating events, and any database write are guarded — try one of the examples below.');
+refreshPanels();
+setInterval(refreshPanels, 5000);
+</script>
+</body>
+</html>
